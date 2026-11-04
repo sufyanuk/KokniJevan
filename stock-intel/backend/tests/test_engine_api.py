@@ -119,6 +119,28 @@ def test_api_dashboard_recommendations_revisions(client, db):
     assert h[0]["ticker"] == "GOOD"
 
 
+def test_cookie_session_and_csrf(client):
+    r = client.post("/api/auth/register", json={"email": "c@example.com", "password": "correct horse battery"})
+    cookie = r.headers["set-cookie"].lower()
+    assert "si_session=" in cookie and "httponly" in cookie and "samesite=lax" in cookie
+    assert client.get("/api/me").json()["email"] == "c@example.com"  # cookie alone authenticates reads
+    body = {"ticker": "X", "side": "buy", "quantity": 1, "price": 1, "trade_date": "2026-10-01"}
+    assert client.post("/api/journal/fills", json=body).status_code == 403  # write without CSRF header
+    assert client.post("/api/journal/fills", json=body, headers={"X-Requested-With": "stockintel"}).status_code == 200
+    client.post("/api/auth/logout")
+    assert client.get("/api/me").status_code == 401
+
+
+def test_dashboard_dedupes_joint_insider_reports_and_so_date(client, db):
+    admin, _ = _auth(client)
+    run_scan(db)
+    d = client.get("/api/dashboard", headers=admin).json()
+    good = [b for b in d["insider_buys"] if b["ticker"] == "GOOD"]
+    assert len(good) == 1 and good[0]["owner"] == "Jane Doe" and good[0]["co_reporters"] == ["Doe Trust"]
+    ins = d["top"][0]["criteria"]["insider"]["metrics"]
+    assert ins["shares_outstanding_date"] == "2026-09-30"  # SEC report date, not the scan date
+
+
 def test_api_tools_and_journal(client):
     h, _ = _auth(client)
     r = client.post("/api/tools/position", json={"account_balance": 3000, "risk_pct": 2, "entry": 100, "stop": 95}).json()

@@ -114,8 +114,9 @@ Hosting (1 small VM, 2 vCPU / 4 GB, managed backups) adds ≈ $20–60/month.
 * Pydantic validation on every input. Config validation rejects price > $100, Top-N > 5, and weights that don't sum to 100.
 * Keys are only in backend env vars and are redacted from error messages.
 * Security headers on the web app; containers run as non-root.
-* Known limitation: the JWT is kept in `localStorage`. Moving it to an httpOnly cookie set by a
-  Next.js route handler is the next hardening step.
+* Browser sessions use an **httpOnly, SameSite=Lax** cookie (`Secure` in production), so page scripts
+  cannot read the token. Cookie-authenticated writes must send `X-Requested-With: stockintel`
+  (CSRF guard). API clients can still use `Authorization: Bearer`.
 
 ## 6. Compliance & licensing considerations
 * Not investment advice; disclaimers on every page.

@@ -12,7 +12,7 @@ TEST_DATABASE_URL=postgresql+psycopg://user:pw@host/db_test python -m pytest -q 
 cd stock-intel/frontend && npx tsc --noEmit && npx eslint src && npm run build
 ```
 
-## What is covered (46 tests; all pass on SQLite, and the engine/API suite also passes on PostgreSQL 16)
+## What is covered (48 tests, no warnings; all pass on SQLite, and the engine/API suite also passes on PostgreSQL 16)
 
 | Area | Tests |
 |---|---|
@@ -26,7 +26,7 @@ cd stock-intel/frontend && npx tsc --noEmit && npx eslint src && npm run build
 | Ranking | never pads the list, mandatory rules, missing never passes, config guards, relaxed-criteria reporting |
 | Tools | spreadsheet position example, allocation limit, short with fees/slippage, expectancy formulas, risk of ruin, FIFO P&L with fees/shorts/dividends |
 | Providers | Form 4 XML parsing, daily-index de-duplication, XBRL point-in-time extraction (multi-class shares), HTTP retry/backoff, 4xx handling, key redaction, caching |
-| End-to-end | full scan through the engine and DB, provider outage → `partial` run with no picks, relaxed config recorded, backtest runs point-in-time, auth/roles, admin validation, recommendation revisions keep the original, journal per-user isolation |
+| End-to-end | full scan through the engine and DB, provider outage → `partial` run with no picks, relaxed config recorded, backtest runs point-in-time, auth/roles, httpOnly cookie session + CSRF guard + logout, admin validation, dashboard joint-filing de-duplication, shares-outstanding report date, recommendation revisions keep the original, journal per-user isolation |
 
 Engine/API tests use a **synthetic** `FakeDataSource` (`tests/conftest.py`) that exists only for tests.
 

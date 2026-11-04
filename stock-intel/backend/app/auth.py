@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,9 @@ from app.db import get_db
 from app.models import User
 
 bearer = HTTPBearer(auto_error=False)
+SESSION_COOKIE = "si_session"
+CSRF_HEADER, CSRF_VALUE = "X-Requested-With", "stockintel"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def hash_password(pw: str) -> str:
@@ -34,11 +37,17 @@ def create_token(user: User) -> str:
                        "exp": now + timedelta(minutes=s.jwt_ttl_minutes)}, s.jwt_secret, algorithm="HS256")
 
 
-def current_user(cred: HTTPAuthorizationCredentials | None = Depends(bearer), db: Session = Depends(get_db)) -> User:
-    if not cred:
+def current_user(request: Request, cred: HTTPAuthorizationCredentials | None = Depends(bearer),
+                 db: Session = Depends(get_db)) -> User:
+    token = cred.credentials if cred else request.cookies.get(SESSION_COOKIE)
+    if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not authenticated")
+    if not cred and request.method not in SAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
+        # Cookie-authenticated writes must carry a custom header, which other sites cannot send
+        # without passing CORS (SameSite=Lax already blocks most cross-site requests).
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "missing CSRF header")
     try:
-        data = jwt.decode(cred.credentials, get_settings().jwt_secret, algorithms=["HS256"])
+        data = jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token")
     user = db.get(User, int(data["sub"]))

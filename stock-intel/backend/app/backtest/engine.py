@@ -27,7 +27,7 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from app import market_calendar as mc
-from app.screening.types import Provenance
+from app.screening.types import Freshness, Provenance, now_utc
 from app.services.datasource import AnalystData, DataSource
 
 
@@ -51,13 +51,16 @@ class PointInTimeDataSource:
     def __getattr__(self, name):
         return getattr(self.inner, name)
 
+    # Current consensus / float would leak future information, so they are not requested at all.
+    @staticmethod
+    def _blocked(name: str) -> Provenance:
+        return Provenance(f"{name} (not point-in-time; excluded)", Freshness.DERIVED, now_utc())
+
     async def analyst(self, ticker):
-        _, prov = await self.inner.analyst(ticker)
-        return AnalystData(None, None, []), prov  # current consensus would leak future information
+        return AnalystData(None, None, []), self._blocked("analyst")
 
     async def float_info(self, ticker):
-        _, prov = await self.inner.float_info(ticker)
-        return {}, prov
+        return {}, self._blocked("float")
 
     async def quote(self, ticker):  # pragma: no cover - live=False in backtests
         raise RuntimeError("live quotes are not allowed in backtests")

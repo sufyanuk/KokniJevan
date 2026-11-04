@@ -102,6 +102,7 @@ class Fundamentals:
     market_cap: float | None = None
     avg_market_cap_24m: float | None = None
     avg_market_cap_36m: float | None = None
+    shares_outstanding_date: date | None = None  # date of the dei shares-outstanding fact used
     raw: dict = field(default_factory=dict)
 
 

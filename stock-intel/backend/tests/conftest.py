@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
 os.environ.setdefault("SEC_USER_AGENT", "StockIntel tests test@example.com")
 
 from app import market_calendar as mc  # noqa: E402
@@ -90,6 +90,7 @@ class FakeDataSource:
         v = next(x for x in self.TICKERS.values() if x["cik"] == cik)
         f = Fundamentals(ticker, v["name"], v["sic"], date(2026, 6, 30), date(2026, 8, 1), "fake XBRL", 1e9, 5e7, 8e7,
                          5e7, 4e8, 1e6)
+        f.shares_outstanding_date = date(2026, 9, 30)
         return f, 100_000_000.0, prov("sec")
 
     async def analyst(self, ticker):

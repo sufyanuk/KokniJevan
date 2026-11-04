@@ -5,14 +5,14 @@ import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import market_calendar as mc
-from app.auth import admin_user, create_token, current_user, hash_password, verify_password
+from app.auth import SESSION_COOKIE, admin_user, create_token, current_user, hash_password, verify_password
 from app.backtest.engine import BacktestParams, PointInTimeDataSource, run_backtest
 from app.config import ScreeningConfig, get_settings
 from app.db import SessionLocal, get_db
@@ -45,23 +45,39 @@ class Credentials(BaseModel):
     password: str = Field(min_length=10, max_length=200)
 
 
+def _session_response(u: User, response: Response) -> dict:
+    """Browser sessions use an httpOnly cookie (not readable by page scripts). The token is also
+    returned in the body for non-browser API clients that send it as a Bearer header."""
+    s = get_settings()
+    token = create_token(u)
+    response.set_cookie(SESSION_COOKIE, token, max_age=s.jwt_ttl_minutes * 60, httponly=True,
+                        secure=s.app_env == "production", samesite="lax", path="/")
+    return {"token": token, "role": u.role}
+
+
 @app.post("/api/auth/register")
-def register(c: Credentials, db: Session = Depends(get_db)):
+def register(c: Credentials, response: Response, db: Session = Depends(get_db)):
     if db.scalars(select(User).where(User.email == c.email.lower())).first():
         raise HTTPException(409, "email already registered")
     first = db.scalar(select(func.count(User.id))) == 0
     u = User(email=c.email.lower(), password_hash=hash_password(c.password), role="admin" if first else "user")
     db.add(u)
     db.commit()
-    return {"token": create_token(u), "role": u.role}
+    return _session_response(u, response)
 
 
 @app.post("/api/auth/login")
-def login(c: Credentials, db: Session = Depends(get_db)):
+def login(c: Credentials, response: Response, db: Session = Depends(get_db)):
     u = db.scalars(select(User).where(User.email == c.email.lower())).first()
     if not u or not verify_password(c.password, u.password_hash):
         raise HTTPException(401, "invalid credentials")
-    return {"token": create_token(u), "role": u.role}
+    return _session_response(u, response)
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return {"ok": True}
 
 
 class NotifyPrefs(BaseModel):
@@ -152,10 +168,21 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(current_user)):
     buys = db.scalars(select(InsiderTransaction).where(InsiderTransaction.code == "P", InsiderTransaction.acquired_disposed == "A",
                                                        InsiderTransaction.is_derivative.is_(False),
                                                        InsiderTransaction.filing_date >= since)
-                      .order_by(InsiderTransaction.filing_date.desc()).limit(25)).all()
-    out["insider_buys"] = [{"ticker": b.ticker, "owner": b.owner_name, "title": b.officer_title or ("Director" if b.is_director else ""),
-                            "transaction_date": b.transaction_date.isoformat(), "filing_date": b.filing_date.isoformat(),
-                            "shares": b.shares, "price": b.price, "value": (b.price or 0) * b.shares} for b in buys]
+                      .order_by(InsiderTransaction.filing_date.desc(), InsiderTransaction.direct_indirect)
+                      .limit(200)).all()
+    # Same rule as the insider criterion: joint/indirect reports of one purchase are shown once.
+    seen: dict[tuple, dict] = {}
+    for b in buys:
+        key = (b.issuer_cik, b.transaction_date, round(b.shares, 4), round(b.price or 0, 4))
+        if key in seen:
+            if b.owner_name not in seen[key]["co_reporters"] and b.owner_name != seen[key]["owner"]:
+                seen[key]["co_reporters"].append(b.owner_name)
+            continue
+        seen[key] = {"ticker": b.ticker, "owner": b.owner_name, "co_reporters": [],
+                     "title": b.officer_title or ("Director" if b.is_director else ""),
+                     "transaction_date": b.transaction_date.isoformat(), "filing_date": b.filing_date.isoformat(),
+                     "shares": b.shares, "price": b.price, "value": (b.price or 0) * b.shares}
+    out["insider_buys"] = list(seen.values())[:25]
     out["provider_health"] = health_rows(db)
     return out
 

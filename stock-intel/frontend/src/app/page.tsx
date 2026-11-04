@@ -160,7 +160,8 @@ export default function DashboardPage() {
           {data?.insider_buys.length ? (
             <div className="overflow-x-auto"><table className="text-sm"><thead><tr><th>Ticker</th><th>Insider</th><th>Role</th><th>Trade</th><th>Filed</th><th>Shares</th><th>Price</th><th>Value</th></tr></thead>
               <tbody>{data.insider_buys.map((b, i) => (
-                <tr key={i}><td>{b.ticker}</td><td className="max-w-44 truncate">{b.owner}</td><td className="max-w-36 truncate text-muted">{b.title}</td>
+                <tr key={i}><td>{b.ticker}</td><td className="max-w-44 truncate" title={b.co_reporters?.length ? `Also reported by: ${b.co_reporters.join(", ")}` : undefined}>
+                    {b.owner}{b.co_reporters?.length ? <span className="text-muted"> (+{b.co_reporters.length} joint)</span> : null}</td><td className="max-w-36 truncate text-muted">{b.title}</td>
                   <td>{b.transaction_date}</td><td>{b.filing_date}</td><td className="num">{compact(b.shares)}</td><td className="num">{usd(b.price)}</td><td className="num">{compact(b.value)}</td></tr>))}</tbody></table></div>
           ) : <Empty>No open-market insider purchases filed in the last 7 days have been ingested.</Empty>}
         </Card>

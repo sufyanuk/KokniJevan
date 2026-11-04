@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { getToken, setToken } from "@/lib/api";
+import { api, logout } from "@/lib/api";
 
 const NAV = [
   ["/", "Dashboard"],
@@ -20,10 +20,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [menu, setMenu] = useState(false);
   useEffect(() => {
-    if (path !== "/login" && !getToken()) router.replace("/login");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- auth gate runs client-side only
-    else setReady(true);
-  }, [path, router]);
+    if (path === "/login" || ready) return;
+    // The session cookie is httpOnly, so ask the backend whether we are signed in.
+    api("/me").then(() => setReady(true), () => router.replace("/login"));
+  }, [path, router, ready]);
   if (path === "/login") return <>{children}</>;
   if (!ready) return null;
   return (
@@ -43,7 +43,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </Link>
             ))}
             <button className="rounded-md px-2.5 py-1.5 text-left text-sm text-muted hover:text-ink md:ml-2"
-              onClick={() => { setToken(null); router.replace("/login"); }}>
+              onClick={async () => { await logout(); setReady(false); router.replace("/login"); }}>
               Sign out
             </button>
           </div>

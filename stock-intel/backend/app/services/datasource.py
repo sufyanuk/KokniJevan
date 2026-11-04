@@ -134,8 +134,9 @@ class LiveDataSource:
         sec = self._need(self.sec, "sec_edgar")
         cf = await sec.companyfacts(cik)
         sub = await sec.submissions(cik)
-        so, _ = shares_outstanding(cf, as_of)
+        so, so_date = shares_outstanding(cf, as_of)
         f = fundamentals_from_xbrl(cf, sub, ticker, as_of, market_cap, avg_24, avg_36)
+        f.shares_outstanding_date = so_date
         return f, so, sec.prov("/api/xbrl/companyfacts", None)
 
     async def analyst(self, ticker):

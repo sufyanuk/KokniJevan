@@ -189,7 +189,7 @@ class ScanEngine:
                         avg24 = float(m.tail(24).mean() * so) if len(m) >= 24 else None
                         avg36 = float(m.tail(36).mean() * so) if len(m) >= 36 else None
                 f.market_cap, f.avg_market_cap_24m, f.avg_market_cap_36m = mcap, avg24, avg36
-                so_date = as_of
+                so_date = f.shares_outstanding_date  # SEC report date, not the scan date
                 shariah_res = sh.screen(f, cfg.shariah, as_of, self.business_review(t, as_of))
         if shariah_res is None:
             shariah_res = sh.ShariahResult("Needs Review", cfg.shariah.methodology,
@@ -320,8 +320,10 @@ class ScanEngine:
         return run
 
     def _has_history(self) -> bool:
+        # Need ~252 sessions for a 52-week IV rank, not just the 41 used by the volume baseline;
+        # otherwise a partial first backfill would never be completed.
         n = self.db.query(OptionsDaily.session).distinct().count()
-        return n >= 41
+        return n >= HISTORY_SESSIONS - 5
 
 
 def _jsonable(o):

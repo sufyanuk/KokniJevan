@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Button, ErrorBox, Field } from "@/components/ui";
-import { api, setToken } from "@/lib/api";
+import { api } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,8 +17,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ token: string }>(`/auth/${mode}`, { method: "POST", body: JSON.stringify({ email, password }) });
-      setToken(r.token);
+      await api(`/auth/${mode}`, { method: "POST", body: JSON.stringify({ email, password }) }); // sets session cookie
       router.replace("/");
     } catch (err) {
       setError((err as Error).message);
